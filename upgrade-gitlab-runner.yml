@@ -1,0 +1,52 @@
+---
+- hosts: infra
+
+  tasks:
+  - name: Stop gitlab-runner
+    command: gitlab-runner stop
+    become: true
+
+  - find:
+     paths: /tmp
+     patterns: "gitlab-runner*"
+    register: wildcard_files_to_delete
+
+  - name: Remove file with wildcard gitlab-runner* in /tmp
+    file:
+      path: "{{ item.path }}"
+      state: absent
+    with_items: "{{ wildcard_files_to_delete.files }}"
+    become: true
+
+  - name : Download latest gitlab-runner version
+    get_url:
+     url: https://gitlab-runner-downloads.s3.amazonaws.com/latest/binaries/gitlab-runner-linux-amd64
+     dest: /tmp/
+
+  - name: Delete old file gitlab-runner in /usr/local/bin
+    file:
+      path: /usr/local/bin/gitlab-runner.old
+      state: absent
+    become: true
+
+  - stat:
+      path: /usr/local/bin/gitlab-runner
+    register: stat_result
+
+  - name: Create a backup of old version
+    command: mv /usr/local/bin/gitlab-runner /usr/local/bin/gitlab-runner.old
+    when: stat_result.stat.exists == True
+    become: true
+
+  - copy:
+     src: /tmp/gitlab-runner-linux-amd64
+     dest: /usr/local/bin/gitlab-runner
+     remote_src: yes
+     owner: root
+     group: root
+     mode: "+x"
+    become: true
+
+  - name: Start gitlab-runner
+    command: gitlab-runner start
+    become: true
